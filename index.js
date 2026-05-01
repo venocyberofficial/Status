@@ -7,81 +7,48 @@ const {
 } = require("@whiskeysockets/baileys");
 const P = require("pino");
 const express = require("express");
+const fs = require("fs-extra");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+const SESSION_PATH = './session_status_king';
 
 app.use(express.json());
 
-// --- FRONTEND (WEB INTERFACE) ---
+// FRONTEND
 app.get('/', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="sw">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Venocyber Status King</title>
-            <style>
-                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #075e54; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; }
-                .container { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; width: 350px; color: #333; }
-                h2 { color: #075e54; margin-bottom: 10px; }
-                input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; text-align: center; }
-                button { width: 100%; padding: 12px; background: #25d366; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-                button:hover { background: #128c7e; }
-                #pairing-code { margin-top: 20px; padding: 15px; background: #e7f3ef; border-radius: 8px; font-size: 24px; font-weight: bold; color: #075e54; display: none; letter-spacing: 4px; }
-                .loader { display: none; margin-top: 10px; font-size: 14px; color: #666; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Venocyber Status King 👑</h2>
-                <p>Weka namba yako upate kodi ya kuunganisha bot.</p>
-                <input type="number" id="number" placeholder="255625774543">
-                <button onclick="getCode()">Tengeneza Pairing Code</button>
-                <div id="loader" class="loader">Inatengeneza kodi, subiri...</div>
-                <div id="pairing-code"></div>
-                <p style="font-size: 11px; margin-top: 15px; color: #999;">Baada ya kupata kodi, nenda WhatsApp > Linked Devices > Link with Phone Number.</p>
-            </div>
-
-            <script>
-                async function getCode() {
-                    const num = document.getElementById('number').value;
-                    const codeDiv = document.getElementById('pairing-code');
-                    const loader = document.getElementById('loader');
-                    if(!num) return alert("Weka namba ya simu!");
-                    
-                    loader.style.display = "block";
-                    codeDiv.style.display = "none";
-                    
-                    try {
-                        const res = await fetch('/pair?number=' + num);
-                        const data = await res.json();
-                        loader.style.display = "none";
-                        if(data.code) {
-                            codeDiv.innerText = data.code;
-                            codeDiv.style.display = "block";
-                        } else {
-                            alert("Kuna tatizo, jaribu tena.");
-                        }
-                    } catch (e) {
-                        loader.style.display = "none";
-                        alert("Server error!");
-                    }
-                }
-            </script>
-        </body>
-        </html>
-    `);
+    res.send(`<body style="background:#075e54;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
+        <div style="background:white;padding:30px;border-radius:15px;color:#333;text-align:center;width:320px;">
+            <h2>Venocyber Status King 👑</h2>
+            <input type="number" id="num" placeholder="255761070761" style="width:100%;padding:12px;margin:15px 0;border:1px solid #ddd;border-radius:8px;">
+            <button onclick="pair()" style="width:100%;padding:12px;background:#25d366;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;">Get Pairing Code</button>
+            <div id="cp" style="margin-top:20px;padding:10px;background:#e7f3ef;border-radius:8px;font-size:22px;font-weight:bold;display:none;letter-spacing:3px;"></div>
+            <p id="ld" style="display:none;color:red;font-size:12px;">Processing... Wait 15 seconds</p>
+        </div>
+        <script>
+            async function pair() {
+                const n = document.getElementById('num').value;
+                const cp = document.getElementById('cp');
+                const ld = document.getElementById('ld');
+                if(!n) return alert("Weka namba!");
+                ld.style.display="block"; cp.style.display="none";
+                const r = await fetch('/pair?number='+n);
+                const d = await r.json();
+                ld.style.display="none";
+                if(d.code) { cp.innerText=d.code; cp.style.display="block"; }
+                else { alert("Error. Try again."); }
+            }
+        </script>
+    </body>`);
 });
 
-// --- BOT LOGIC ---
-let sock;
-async function connectToWhatsApp(num = null, res = null) {
-    const { state, saveCreds } = await useMultiFileAuthState('session_status_king');
+async function startStatusBot(num = null, res = null) {
+    if (num && fs.existsSync(SESSION_PATH)) { fs.removeSync(SESSION_PATH); }
+
+    const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
     const { version } = await fetchLatestBaileysVersion();
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
         version,
         auth: {
             creds: state.creds,
@@ -89,59 +56,70 @@ async function connectToWhatsApp(num = null, res = null) {
         },
         printQRInTerminal: false,
         logger: P({ level: 'silent' }),
-        browser: ["Ubuntu", "Chrome", "121.0.6167.85"]
+        browser: ["Ubuntu", "Chrome", "121.0.6167.85"],
+        // HIZI SETTINGS NI MUHIMU ILI STATUS ZIONEKANE
+        syncFullHistory: true,
+        shouldSyncHistoryMessage: () => true,
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Kazi ya Bot: Auto Status pekee
+    // MFUMO WA KUSOMA STATUS (Force Read)
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
-        if (!msg.message) return;
+        if (!msg || !msg.message) return;
+        
         const jid = msg.key.remoteJid;
 
+        // Kama ni status
         if (jid === 'status@broadcast') {
-            await sock.readMessages([msg.key]); // View
-            await sock.sendMessage(jid, { react: { text: "💚", key: msg.key } }, { statusJidList: [msg.key.participant, sock.user.id] }); // Like
+            try {
+                // 1. Mark as Read (View)
+                await sock.readMessages([msg.key]);
+                
+                // 2. Add Reaction (Like)
+                await sock.sendMessage(jid, { 
+                    react: { text: "💚", key: msg.key } 
+                }, { statusJidList: [msg.key.participant, sock.user.id] });
+                
+                console.log(`✅ Status Viewed & Liked from: ${msg.pushName || msg.key.participant}`);
+            } catch (err) {
+                console.log("View Error: ", err.message);
+            }
         }
     });
 
     sock.ev.on('connection.update', async (u) => {
         const { connection, lastDisconnect } = u;
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) connectToWhatsApp();
+            const code = lastDisconnect.error?.output?.statusCode;
+            if (code !== DisconnectReason.loggedOut) startStatusBot();
         } else if (connection === 'open') {
-            console.log("✅ Bot connected successful!");
-            // Tuma ujumbe kwa mtumiaji (Bot owner)
+            console.log("✅ Status King is Online!");
             const myJid = sock.user.id.split(':')[0] + "@s.whatsapp.net";
-            const myName = sock.user.name || "Mtumiaji";
-            await sock.sendMessage(myJid, { text: `Dear ${myName} Venocyber status View king 👑 connected successful Enjoy` });
+            await sock.sendMessage(myJid, { text: `Dear ${sock.user.name || 'User'} Venocyber status View king 👑 connected successful Enjoy` });
         }
     });
 
-    // Request pairing code kama namba imewekwa toka Web
     if (num && !sock.authState.creds.registered) {
         setTimeout(async () => {
             try {
                 let code = await sock.requestPairingCode(num);
-                if (res) res.json({ code: code });
+                if (res && !res.headersSent) res.json({ code: code });
             } catch (e) {
-                if (res) res.json({ error: "Failed" });
+                if (res && !res.headersSent) res.json({ error: "Try Again" });
             }
-        }, 3000);
+        }, 15000); // Tupa 15 seconds kwa Render
     }
 }
 
-// Route ya Web kuomba kodi
-app.get('/pair', async (req, res) => {
+app.get('/pair', (req, res) => {
     const num = req.query.number;
     if (!num) return res.json({ error: "No number" });
-    connectToWhatsApp(num, res);
+    startStatusBot(num, res);
 });
 
-// Anza seva
 app.listen(PORT, () => {
-    console.log(`Server started on port ${PORT}`);
-    connectToWhatsApp(); // Washa bot iwe tayari
+    console.log(`Live on ${PORT}`);
+    startStatusBot(); 
 });
