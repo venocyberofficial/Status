@@ -1,26 +1,15 @@
 {
   "name": "venocyber-status-view-king",
   "version": "1.0.0",
-  "description": "Venocyber Status View King 👑 - WhatsApp Auto Status Viewer",
+  "description": "WhatsApp Auto Status View Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
-  "keywords": ["whatsapp", "baileys", "status-viewer", "bot"],
-  "author": "Venocyber",
-  "license": "MIT",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.6.0",
+    "@whiskeysockets/baileys": "latest",
     "express": "^4.18.2",
-    "qrcode-terminal": "^0.12.0",
-    "pino": "^8.17.2",
-    "dotenv": "^16.3.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "pino": "^8.14.1",
+    "qrcode-terminal": "^0.12.0"
   }
 }
