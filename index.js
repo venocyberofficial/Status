@@ -1,10 +1,10 @@
 const { 
     default: makeWASocket, 
     useMultiFileAuthState, 
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    DisconnectReason,
-    Browsers
+    fetchLatestBaileysVersion, 
+    DisconnectReason, 
+    Browsers,
+    makeCacheableSignalKeyStore
 } = require("@whiskeysockets/baileys");
 const P = require("pino");
 const express = require("express");
@@ -12,11 +12,11 @@ const fs = require("fs-extra");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const SESSION_PATH = './session_king';
+const SESSION_PATH = './auth_info_baileys';
 
 app.use(express.json());
 
-// MUONEKANO MKUBWA NA MZURI (RESPONSIVE)
+// --- DASHBOARD UI (BIG & RESPONSIVE) ---
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -26,21 +26,21 @@ app.get('/', (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>Venocyber Status King</title>
             <style>
-                body { font-family: -apple-system, system-ui, sans-serif; background: #128C7E; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-                .card { background: white; padding: 40px 25px; border-radius: 25px; width: 95%; max-width: 400px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
-                h1 { color: #075e54; font-size: 30px; margin-bottom: 5px; }
-                p { color: #666; font-size: 14px; margin-bottom: 25px; }
-                input { width: 100%; padding: 15px; margin-bottom: 20px; border: 2px solid #ddd; border-radius: 12px; font-size: 18px; text-align: center; outline: none; transition: 0.3s; }
-                input:focus { border-color: #25D366; }
-                button { width: 100%; padding: 15px; background: #25D366; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-                #pairing-code { margin-top: 25px; padding: 20px; background: #f0fdf4; border: 2px dashed #25D366; border-radius: 12px; font-size: 35px; font-weight: 800; color: #075e54; display: none; letter-spacing: 4px; }
-                .loader { color: #d9534f; margin-top: 15px; font-weight: bold; display: none; }
+                body { font-family: -apple-system, sans-serif; background: #075e54; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                .card { background: white; padding: 40px 25px; border-radius: 25px; width: 90%; max-width: 420px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
+                h1 { color: #075e54; font-size: 35px; margin-bottom: 10px; font-weight: 800; }
+                p { color: #666; font-size: 16px; margin-bottom: 30px; }
+                input { width: 100%; padding: 18px; margin-bottom: 20px; border: 2px solid #eee; border-radius: 12px; font-size: 22px; text-align: center; box-sizing: border-box; outline: none; }
+                input:focus { border-color: #25d366; }
+                button { width: 100%; padding: 18px; background: #25d366; color: white; border: none; border-radius: 12px; font-size: 20px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+                #pairing-code { margin-top: 30px; padding: 20px; background: #f0fdf4; border: 3px dashed #25d366; border-radius: 15px; font-size: 38px; font-weight: 900; color: #075e54; display: none; letter-spacing: 5px; }
+                .loader { color: #d9534f; margin-top: 15px; font-weight: bold; display: none; font-size: 16px; }
             </style>
         </head>
         <body>
             <div class="card">
-                <h1>Venocyber 👑</h1>
-                <p>Auto Status View King</p>
+                <h1>VENOCYBER 👑</h1>
+                <p>Ingiza namba yako kuanza (255xxx)</p>
                 <input type="number" id="num" placeholder="255761070761">
                 <button onclick="getPairingCode()" id="btn">Tengeneza Kodi</button>
                 <div id="loader" class="loader">Inatengeneza... Subiri sekunde 15...</div>
@@ -59,8 +59,8 @@ app.get('/', (req, res) => {
                         const data = await res.json();
                         l.style.display = "none"; b.disabled = false;
                         if(data.code) { r.innerText = data.code; r.style.display = "block"; }
-                        else { alert("WhatsApp Server Busy. Jaribu tena."); }
-                    } catch(e) { alert("Server error!"); b.disabled = false; l.style.display = "none"; }
+                        else { alert("WhatsApp imekataa! Jaribu tena."); }
+                    } catch(e) { alert("Server Error!"); b.disabled = false; l.style.display = "none"; }
                 }
             </script>
         </body>
@@ -68,47 +68,51 @@ app.get('/', (req, res) => {
     `);
 });
 
+// --- BOT LOGIC ---
+let sock;
 async function startBot(num = null, res = null) {
+    // Safisha session kama tunaomba kodi mpya
     if (num && fs.existsSync(SESSION_PATH)) { fs.removeSync(SESSION_PATH); }
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
+    sock = makeWASocket({
         version,
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: "silent" })),
         },
-        printQRInTerminal: false,
         logger: P({ level: 'silent' }),
-        // Hapa tunatumia identity ya Safari on Mac ili WhatsApp wasishtuke
-        browser: Browsers.macOS("Safari"),
-        defaultQueryTimeoutMs: 60000,
+        browser: Browsers.macOS("Chrome"), // Desktop identity ili kuzuia kukataliwa
         syncFullHistory: false
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // AUTO STATUS LOGIC
+    // AUTO STATUS VIEW & LIKE
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
         if (msg?.key.remoteJid === 'status@broadcast') {
-            await sock.readMessages([msg.key]);
-            await sock.sendMessage(msg.key.remoteJid, { react: { text: "💚", key: msg.key } }, { statusJidList: [msg.key.participant, sock.user.id] });
+            try {
+                await sock.readMessages([msg.key]);
+                await sock.sendMessage(msg.key.remoteJid, { react: { text: "💚", key: msg.key } }, { statusJidList: [msg.key.participant, sock.user.id] });
+            } catch (e) { console.log("View Error"); }
         }
     });
 
     sock.ev.on('connection.update', async (u) => {
-        if (u.connection === 'close') {
-            const shouldReconnect = (u.lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+        const { connection, lastDisconnect } = u;
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) startBot();
-        } else if (u.connection === 'open') {
+        } else if (connection === 'open') {
             const myJid = sock.user.id.split(':')[0] + "@s.whatsapp.net";
             await sock.sendMessage(myJid, { text: `Dear ${sock.user.name || 'User'} Venocyber status View king 👑 connected successful Enjoy` });
         }
     });
 
+    // Request Pairing Code
     if (num && !sock.authState.creds.registered) {
         setTimeout(async () => {
             try {
@@ -126,6 +130,6 @@ app.get('/pair', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Live on ${PORT}`);
+    console.log(`Live on port ${PORT}`);
     startBot();
 });
