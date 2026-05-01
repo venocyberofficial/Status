@@ -3,165 +3,106 @@ const {
     useMultiFileAuthState,
     delay,
     makeCacheableSignalKeyStore,
-    PHONENUMBER_MCC
+    fetchLatestBaileysVersion
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require("express");
-const path = require("path");
-const fs = require("fs");
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static('public'));
+let sock;
 
-// HTML Interface yenye Gold Theme
-app.get('/', (req, res) => {
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Venocyber Status View King</title>
-        <style>
-            body {
-                background: linear-gradient(135deg, #000000 0%, #434343 100%);
-                color: #FFD700;
-                font-family: 'Arial', sans-serif;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }
-            .container {
-                border: 2px solid #FFD700;
-                padding: 30px;
-                border-radius: 15px;
-                box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-                text-align: center;
-                background: rgba(0, 0, 0, 0.8);
-            }
-            h1 { font-size: 24px; margin-bottom: 20px; text-shadow: 2px 2px #000; }
-            input {
-                padding: 10px;
-                width: 80%;
-                border-radius: 5px;
-                border: 1px solid #FFD700;
-                background: #222;
-                color: #fff;
-                margin-bottom: 20px;
-            }
-            button {
-                padding: 10px 20px;
-                background: #FFD700;
-                color: #000;
-                border: none;
-                border-radius: 5px;
-                font-weight: bold;
-                cursor: pointer;
-                transition: 0.3s;
-            }
-            button:hover { background: #fff; box-shadow: 0 0 10px #FFD700; }
-            #pairCode {
-                margin-top: 20px;
-                font-size: 22px;
-                letter-spacing: 2px;
-                font-weight: bold;
-                color: #fff;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>👑 VENOCYBER STATUS VIEW KING 👑</h1>
-            <p>Ingiza namba yako (mfano: 2557XXXXXXXX)</p>
-            <input type="text" id="number" placeholder="255767000000">
-            <br>
-            <button onclick="getPairingCode()">Tengeneza Pairing Code</button>
-            <div id="pairCode"></div>
-        </div>
-
-        <script>
-            async function getPairingCode() {
-                const num = document.getElementById('number').value;
-                const display = document.getElementById('pairCode');
-                if(!num) return alert("Tafadhali ingiza namba!");
-                display.innerText = "Inatengeneza...";
-                
-                try {
-                    const response = await fetch('/code?number=' + num);
-                    const data = await response.json();
-                    display.innerText = "CODE YAKO: " + data.code;
-                } catch (e) {
-                    display.innerText = "Jaribu tena baadaye.";
-                }
-            }
-        </script>
-    </body>
-    </html>
-    `);
-});
-
-// Logic ya WhatsApp
 async function startVenocyber() {
     const { state, saveCreds } = await useMultiFileAuthState('session');
+    const { version } = await fetchLatestBaileysVersion();
     
-    const client = makeWASocket({
+    sock = makeWASocket({
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }),
-        browser: ["Ubuntu", "Chrome", "20.0.04"]
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        version
     });
 
-    // Endpoint ya kutoa Pairing Code
-    app.get('/code', async (req, res) => {
-        let phoneNumber = req.query.number.replace(/[^0-9]/g, '');
-        if (!client.authState.creds.registered) {
-            let code = await client.requestPairingCode(phoneNumber);
-            res.json({ code: code });
-        } else {
-            res.json({ code: "Tayari umeunganishwa!" });
-        }
-    });
+    sock.ev.on('creds.update', saveCreds);
 
-    client.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update;
+    sock.ev.on('connection.update', async (update) => {
+        const { connection } = update;
         if (connection === 'open') {
-            console.log('Bot Imeunganishwa!');
-            const user = client.user.name || "Mtumiaji";
-            await client.sendMessage(client.user.id, { 
-                text: `Dear ${user}, Venocyber Status View King 👑 is connected successful Congratulations` 
+            const user = sock.user.id.split(':')[0];
+            await sock.sendMessage(sock.user.id, { 
+                text: `Dear ${sock.user.name || 'User'}, Venocyber Status View King 👑 is connected successful Congratulations` 
             });
         }
-        if (connection === 'close') {
-            startVenocyber(); // Iki-disconnect, iwashe tena
-        }
+        if (connection === 'close') startVenocyber();
     });
 
-    client.ev.on('creds.update', saveCreds);
-
-    // AUTO STATUS VIEW LOGIC
-    client.ev.on('messages.upsert', async (chatUpdate) => {
-        try {
-            const msg = chatUpdate.messages[0];
-            if (!msg.key.fromMe && msg.key.remoteJid === 'status@broadcast') {
-                await client.readMessages([msg.key]);
-                console.log(`Status ya ${msg.pushName} imewekwa 'Seen' ✅`);
-            }
-        } catch (e) {
-            console.error(e);
+    sock.ev.on('messages.upsert', async (chatUpdate) => {
+        const msg = chatUpdate.messages[0];
+        if (msg.key.remoteJid === 'status@broadcast') {
+            await sock.readMessages([msg.key]);
         }
     });
 }
 
 startVenocyber();
 
-app.listen(PORT, () => {
-    console.log(`Server inatumika kwenye port ${PORT}`);
+// WEB INTERFACE
+app.get('/', (req, res) => {
+    res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Venocyber Status View King</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { background: #000; color: #FFD700; font-family: sans-serif; text-align: center; padding-top: 50px; }
+            .card { border: 2px solid #FFD700; padding: 20px; border-radius: 15px; display: inline-block; background: #111; box-shadow: 0 0 15px #FFD700; width: 90%; max-width: 400px; }
+            input { width: 80%; padding: 10px; margin: 15px 0; border-radius: 5px; border: 1px solid #FFD700; background: #222; color: #fff; }
+            button { background: #FFD700; color: #000; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+            #result { margin-top: 20px; font-weight: bold; font-size: 1.2rem; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>👑 VENOCYBER STATUS VIEW KING 👑</h2>
+            <input type="number" id="num" placeholder="255767000000">
+            <button onclick="getCode()">Tengeneza Pairing Code</button>
+            <div id="result"></div>
+        </div>
+        <script>
+            async function getCode() {
+                const num = document.getElementById('num').value;
+                const resDiv = document.getElementById('result');
+                if(!num) return alert("Weka namba!");
+                resDiv.innerText = "Tafadhali subiri...";
+                try {
+                    const response = await fetch('/pair?number=' + num);
+                    const data = await response.json();
+                    resDiv.innerText = data.code || "Jaribu tena!";
+                } catch (e) { resDiv.innerText = "Error! Hakikisha Render imemaliza ku-deploy."; }
+            }
+        </script>
+    </body>
+    </html>`);
 });
+
+app.get('/pair', async (req, res) => {
+    let num = req.query.number;
+    if (!num) return res.json({ error: "No number" });
+    try {
+        if (!sock.authState.creds.registered) {
+            let code = await sock.requestPairingCode(num);
+            res.json({ code: code });
+        } else {
+            res.json({ code: "Tayari umeunganishwa!" });
+        }
+    } catch (e) {
+        res.json({ error: "Server Busy" });
+    }
+});
+
+app.listen(PORT);
