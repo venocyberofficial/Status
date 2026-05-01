@@ -3,7 +3,8 @@ const {
     useMultiFileAuthState,
     delay,
     makeCacheableSignalKeyStore,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    DisconnectReason
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require("express");
@@ -23,23 +24,35 @@ async function startVenocyber() {
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }),
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        browser: ["Venocyber King", "Safari", "1.0.0"],
         version
     });
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
-        const { connection } = update;
+        const { connection, lastDisconnect } = update;
+        
         if (connection === 'open') {
-            const user = sock.user.id.split(':')[0];
+            // Hapa bot inasoma jina la akaunti iliyounganishwa
+            const botNumber = sock.user.id.split(':')[0];
+            const pushName = sock.user.name || "Mtumiaji";
+            
+            console.log(`Bot imeunganishwa kwa: ${pushName}`);
+
+            // Kutuma ujumbe wa Feedback kama ulivyoagiza
             await sock.sendMessage(sock.user.id, { 
-                text: `Dear ${sock.user.name || 'User'}, Venocyber Status View King 👑 is connected successful Congratulations` 
+                text: `Dear ${pushName} Venocyber status view king 👑 is connected successful Congratulations` 
             });
         }
-        if (connection === 'close') startVenocyber();
+
+        if (connection === 'close') {
+            let shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) startVenocyber();
+        }
     });
 
+    // AUTO STATUS VIEW
     sock.ev.on('messages.upsert', async (chatUpdate) => {
         const msg = chatUpdate.messages[0];
         if (msg.key.remoteJid === 'status@broadcast') {
@@ -50,58 +63,117 @@ async function startVenocyber() {
 
 startVenocyber();
 
-// WEB INTERFACE
+// INTERFACE YA DHAHABU (GOLD & LARGE UI)
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
-    <html>
+    <html lang="sw">
     <head>
-        <title>Venocyber Status View King</title>
+        <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Venocyber King - Status View</title>
         <style>
-            body { background: #000; color: #FFD700; font-family: sans-serif; text-align: center; padding-top: 50px; }
-            .card { border: 2px solid #FFD700; padding: 20px; border-radius: 15px; display: inline-block; background: #111; box-shadow: 0 0 15px #FFD700; width: 90%; max-width: 400px; }
-            input { width: 80%; padding: 10px; margin: 15px 0; border-radius: 5px; border: 1px solid #FFD700; background: #222; color: #fff; }
-            button { background: #FFD700; color: #000; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-            #result { margin-top: 20px; font-weight: bold; font-size: 1.2rem; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+                background: linear-gradient(180deg, #000 0%, #1a1a00 100%);
+                color: #FFD700;
+                font-family: 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                overflow: hidden;
+            }
+            .main-box {
+                width: 90%;
+                max-width: 450px;
+                background: rgba(0,0,0,0.9);
+                border: 4px solid #FFD700;
+                border-radius: 30px;
+                padding: 50px 20px;
+                text-align: center;
+                box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
+            }
+            h1 { font-size: 2.5rem; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; }
+            .sub-txt { color: #fff; margin-bottom: 40px; font-weight: 300; }
+            input {
+                width: 100%;
+                padding: 18px;
+                background: #111;
+                border: 2px solid #FFD700;
+                border-radius: 15px;
+                color: #fff;
+                font-size: 1.2rem;
+                margin-bottom: 25px;
+                outline: none;
+                text-align: center;
+            }
+            button {
+                width: 100%;
+                padding: 18px;
+                background: #FFD700;
+                color: #000;
+                border: none;
+                border-radius: 15px;
+                font-size: 1.3rem;
+                font-weight: bold;
+                cursor: pointer;
+                transition: 0.3s ease;
+                box-shadow: 0 5px 15px rgba(218, 165, 32, 0.4);
+            }
+            button:hover { background: #fff; transform: translateY(-3px); }
+            #codeDisplay {
+                margin-top: 30px;
+                padding: 20px;
+                background: #222;
+                border-radius: 15px;
+                font-size: 2rem;
+                color: #fff;
+                border: 2px dashed #FFD700;
+                display: none;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
-        <div class="card">
-            <h2>👑 VENOCYBER STATUS VIEW KING 👑</h2>
-            <input type="number" id="num" placeholder="255767000000">
-            <button onclick="getCode()">Tengeneza Pairing Code</button>
-            <div id="result"></div>
+        <div class="main-box">
+            <h1>👑 VENOCYBER</h1>
+            <p class="sub-txt">STATUS VIEW KING 👑</p>
+            <input type="number" id="numInput" placeholder="255761070761">
+            <button onclick="fetchCode()">Tengeneza Pairing Code</button>
+            <div id="codeDisplay"></div>
         </div>
+
         <script>
-            async function getCode() {
-                const num = document.getElementById('num').value;
-                const resDiv = document.getElementById('result');
-                if(!num) return alert("Weka namba!");
-                resDiv.innerText = "Tafadhali subiri...";
+            async function fetchCode() {
+                const namba = document.getElementById('numInput').value;
+                const box = document.getElementById('codeDisplay');
+                if(!namba) return alert("Weka namba!");
+                
+                box.style.display = "block";
+                box.innerText = "IKIDOWNLOAD...";
+                
                 try {
-                    const response = await fetch('/pair?number=' + num);
-                    const data = await response.json();
-                    resDiv.innerText = data.code || "Jaribu tena!";
-                } catch (e) { resDiv.innerText = "Error! Hakikisha Render imemaliza ku-deploy."; }
+                    const res = await fetch('/get-pair?number=' + namba);
+                    const data = await res.json();
+                    box.innerText = data.code || "JARIBU TENA!";
+                } catch (e) {
+                    box.innerText = "ERROR!";
+                }
             }
         </script>
     </body>
-    </html>`);
+    </html>
+    `);
 });
 
-app.get('/pair', async (req, res) => {
-    let num = req.query.number;
-    if (!num) return res.json({ error: "No number" });
+app.get('/get-pair', async (req, res) => {
+    let namba = req.query.number;
     try {
-        if (!sock.authState.creds.registered) {
-            let code = await sock.requestPairingCode(num);
-            res.json({ code: code });
-        } else {
-            res.json({ code: "Tayari umeunganishwa!" });
-        }
+        let code = await sock.requestPairingCode(namba);
+        res.json({ code: code });
     } catch (e) {
-        res.json({ error: "Server Busy" });
+        res.json({ error: "Goma" });
     }
 });
 
