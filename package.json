@@ -1,15 +1,17 @@
 {
   "name": "venocyber-status-view-king",
-  "version": "1.0.0",
-  "description": "WhatsApp Auto Status View Bot",
+  "version": "1.1.0",
+  "description": "WhatsApp Auto Status View Bot with Gold UI",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "latest",
+    "@adiwajshing/keyed-db": "^0.2.4",
     "express": "^4.18.2",
     "pino": "^8.14.1",
+    "pino-pretty": "^10.0.0",
     "qrcode-terminal": "^0.12.0"
   }
 }
