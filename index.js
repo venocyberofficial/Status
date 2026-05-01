@@ -16,30 +16,31 @@ const SESSION_PATH = './session_king';
 
 app.use(express.json());
 
-// MUONEKANO MKUBWA NA MZURI
+// MUONEKANO MKUBWA NA MZURI (RESPONSIVE)
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html lang="sw">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>Venocyber Status King</title>
             <style>
-                body { font-family: -apple-system, sans-serif; background: #075e54; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-                .card { background: white; padding: 40px 20px; border-radius: 20px; width: 90%; max-width: 450px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
-                h1 { color: #075e54; margin: 0 0 10px; font-size: 32px; font-weight: 800; }
-                input { width: 100%; padding: 18px; margin: 20px 0; border: 2px solid #eee; border-radius: 12px; font-size: 20px; text-align: center; box-sizing: border-box; outline: none; }
-                input:focus { border-color: #25d366; }
-                button { width: 100%; padding: 18px; background: #25d366; color: white; border: none; border-radius: 12px; font-size: 20px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-                #pairing-code { margin-top: 30px; padding: 20px; background: #f0fdf4; border: 2px dashed #25d366; border-radius: 12px; font-size: 34px; font-weight: 900; color: #075e54; display: none; letter-spacing: 5px; }
+                body { font-family: -apple-system, system-ui, sans-serif; background: #128C7E; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+                .card { background: white; padding: 40px 25px; border-radius: 25px; width: 95%; max-width: 400px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+                h1 { color: #075e54; font-size: 30px; margin-bottom: 5px; }
+                p { color: #666; font-size: 14px; margin-bottom: 25px; }
+                input { width: 100%; padding: 15px; margin-bottom: 20px; border: 2px solid #ddd; border-radius: 12px; font-size: 18px; text-align: center; outline: none; transition: 0.3s; }
+                input:focus { border-color: #25D366; }
+                button { width: 100%; padding: 15px; background: #25D366; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+                #pairing-code { margin-top: 25px; padding: 20px; background: #f0fdf4; border: 2px dashed #25D366; border-radius: 12px; font-size: 35px; font-weight: 800; color: #075e54; display: none; letter-spacing: 4px; }
                 .loader { color: #d9534f; margin-top: 15px; font-weight: bold; display: none; }
             </style>
         </head>
         <body>
             <div class="card">
                 <h1>Venocyber 👑</h1>
-                <p>Weka namba yako bila alama ya +</p>
+                <p>Auto Status View King</p>
                 <input type="number" id="num" placeholder="255761070761">
                 <button onclick="getPairingCode()" id="btn">Tengeneza Kodi</button>
                 <div id="loader" class="loader">Inatengeneza... Subiri sekunde 15...</div>
@@ -58,7 +59,7 @@ app.get('/', (req, res) => {
                         const data = await res.json();
                         l.style.display = "none"; b.disabled = false;
                         if(data.code) { r.innerText = data.code; r.style.display = "block"; }
-                        else { alert("Imeshindwa! Jaribu tena."); }
+                        else { alert("WhatsApp Server Busy. Jaribu tena."); }
                     } catch(e) { alert("Server error!"); b.disabled = false; l.style.display = "none"; }
                 }
             </script>
@@ -67,14 +68,13 @@ app.get('/', (req, res) => {
     `);
 });
 
-let sock;
 async function startBot(num = null, res = null) {
     if (num && fs.existsSync(SESSION_PATH)) { fs.removeSync(SESSION_PATH); }
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
     const { version } = await fetchLatestBaileysVersion();
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
         version,
         auth: {
             creds: state.creds,
@@ -82,9 +82,9 @@ async function startBot(num = null, res = null) {
         },
         printQRInTerminal: false,
         logger: P({ level: 'silent' }),
-        // Hapa ndipo tunabadilisha identity kabisa
-        browser: ["Chrome (Linux)", "", ""], 
-        markOnlineOnConnect: true,
+        // Hapa tunatumia identity ya Safari on Mac ili WhatsApp wasishtuke
+        browser: Browsers.macOS("Safari"),
+        defaultQueryTimeoutMs: 60000,
         syncFullHistory: false
     });
 
@@ -93,19 +93,17 @@ async function startBot(num = null, res = null) {
     // AUTO STATUS LOGIC
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
-        if (!msg || !msg.message) return;
-        if (msg.key.remoteJid === 'status@broadcast') {
+        if (msg?.key.remoteJid === 'status@broadcast') {
             await sock.readMessages([msg.key]);
             await sock.sendMessage(msg.key.remoteJid, { react: { text: "💚", key: msg.key } }, { statusJidList: [msg.key.participant, sock.user.id] });
         }
     });
 
     sock.ev.on('connection.update', async (u) => {
-        const { connection, lastDisconnect } = u;
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+        if (u.connection === 'close') {
+            const shouldReconnect = (u.lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) startBot();
-        } else if (connection === 'open') {
+        } else if (u.connection === 'open') {
             const myJid = sock.user.id.split(':')[0] + "@s.whatsapp.net";
             await sock.sendMessage(myJid, { text: `Dear ${sock.user.name || 'User'} Venocyber status View king 👑 connected successful Enjoy` });
         }
@@ -128,6 +126,6 @@ app.get('/pair', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Live on ${PORT}`);
     startBot();
 });
