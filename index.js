@@ -4,7 +4,8 @@ const {
     delay,
     makeCacheableSignalKeyStore,
     fetchLatestBaileysVersion,
-    DisconnectReason
+    DisconnectReason,
+    Browsers
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require("express");
@@ -24,7 +25,8 @@ async function startVenocyber() {
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }),
-        browser: ["Venocyber King", "Safari", "1.0.0"],
+        // Hii sehemu ndiyo muhimu kwa ajili ya pairing code kukubali
+        browser: Browsers.ubuntu("Chrome"), 
         version
     });
 
@@ -34,13 +36,9 @@ async function startVenocyber() {
         const { connection, lastDisconnect } = update;
         
         if (connection === 'open') {
-            // Hapa bot inasoma jina la akaunti iliyounganishwa
-            const botNumber = sock.user.id.split(':')[0];
             const pushName = sock.user.name || "Mtumiaji";
-            
-            console.log(`Bot imeunganishwa kwa: ${pushName}`);
+            console.log(`Imeunganishwa kikamilifu kwa: ${pushName}`);
 
-            // Kutuma ujumbe wa Feedback kama ulivyoagiza
             await sock.sendMessage(sock.user.id, { 
                 text: `Dear ${pushName} Venocyber status view king 👑 is connected successful Congratulations` 
             });
@@ -52,7 +50,6 @@ async function startVenocyber() {
         }
     });
 
-    // AUTO STATUS VIEW
     sock.ev.on('messages.upsert', async (chatUpdate) => {
         const msg = chatUpdate.messages[0];
         if (msg.key.remoteJid === 'status@broadcast') {
@@ -63,7 +60,6 @@ async function startVenocyber() {
 
 startVenocyber();
 
-// INTERFACE YA DHAHABU (GOLD & LARGE UI)
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -71,95 +67,33 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Venocyber King - Status View</title>
+        <title>Venocyber King - Fix</title>
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-                background: linear-gradient(180deg, #000 0%, #1a1a00 100%);
-                color: #FFD700;
-                font-family: 'Segoe UI', Roboto, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                overflow: hidden;
-            }
-            .main-box {
-                width: 90%;
-                max-width: 450px;
-                background: rgba(0,0,0,0.9);
-                border: 4px solid #FFD700;
-                border-radius: 30px;
-                padding: 50px 20px;
-                text-align: center;
-                box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
-            }
-            h1 { font-size: 2.5rem; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; }
-            .sub-txt { color: #fff; margin-bottom: 40px; font-weight: 300; }
-            input {
-                width: 100%;
-                padding: 18px;
-                background: #111;
-                border: 2px solid #FFD700;
-                border-radius: 15px;
-                color: #fff;
-                font-size: 1.2rem;
-                margin-bottom: 25px;
-                outline: none;
-                text-align: center;
-            }
-            button {
-                width: 100%;
-                padding: 18px;
-                background: #FFD700;
-                color: #000;
-                border: none;
-                border-radius: 15px;
-                font-size: 1.3rem;
-                font-weight: bold;
-                cursor: pointer;
-                transition: 0.3s ease;
-                box-shadow: 0 5px 15px rgba(218, 165, 32, 0.4);
-            }
-            button:hover { background: #fff; transform: translateY(-3px); }
-            #codeDisplay {
-                margin-top: 30px;
-                padding: 20px;
-                background: #222;
-                border-radius: 15px;
-                font-size: 2rem;
-                color: #fff;
-                border: 2px dashed #FFD700;
-                display: none;
-                font-weight: bold;
-            }
+            body { background: #000; color: #FFD700; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; }
+            .box { border: 3px solid #FFD700; padding: 40px; border-radius: 20px; background: #111; width: 90%; max-width: 400px; box-shadow: 0 0 20px #FFD700; }
+            input { width: 100%; padding: 15px; margin: 20px 0; border-radius: 10px; border: 1px solid #FFD700; background: #000; color: #fff; font-size: 1.2rem; }
+            button { width: 100%; padding: 15px; background: #FFD700; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 1.1rem; }
+            #display { margin-top: 20px; font-size: 1.5rem; font-weight: bold; color: #fff; }
         </style>
     </head>
     <body>
-        <div class="main-box">
-            <h1>👑 VENOCYBER</h1>
-            <p class="sub-txt">STATUS VIEW KING 👑</p>
-            <input type="number" id="numInput" placeholder="255761070761">
-            <button onclick="fetchCode()">Tengeneza Pairing Code</button>
-            <div id="codeDisplay"></div>
+        <div class="box">
+            <h2>👑 VENOCYBER KING</h2>
+            <input type="number" id="namba" placeholder="255761070761">
+            <button onclick="pataCode()">Pata Pairing Code</button>
+            <div id="display"></div>
         </div>
-
         <script>
-            async function fetchCode() {
-                const namba = document.getElementById('numInput').value;
-                const box = document.getElementById('codeDisplay');
-                if(!namba) return alert("Weka namba!");
-                
-                box.style.display = "block";
-                box.innerText = "IKIDOWNLOAD...";
-                
+            async function pataCode() {
+                const n = document.getElementById('namba').value;
+                const d = document.getElementById('display');
+                if(!n) return alert("Weka namba!");
+                d.innerText = "Tengeneza...";
                 try {
-                    const res = await fetch('/get-pair?number=' + namba);
-                    const data = await res.json();
-                    box.innerText = data.code || "JARIBU TENA!";
-                } catch (e) {
-                    box.innerText = "ERROR!";
-                }
+                    const r = await fetch('/pair-now?num=' + n);
+                    const res = await r.json();
+                    d.innerText = res.code || "JARIBU TENA";
+                } catch(e) { d.innerText = "ERROR"; }
             }
         </script>
     </body>
@@ -167,10 +101,11 @@ app.get('/', (req, res) => {
     `);
 });
 
-app.get('/get-pair', async (req, res) => {
-    let namba = req.query.number;
+app.get('/pair-now', async (req, res) => {
+    let num = req.query.num;
     try {
-        let code = await sock.requestPairingCode(namba);
+        // Hapa tunaomba code mpya kila wakati
+        let code = await sock.requestPairingCode(num);
         res.json({ code: code });
     } catch (e) {
         res.json({ error: "Goma" });
