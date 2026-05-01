@@ -9,55 +9,50 @@ const {
 const P = require("pino");
 const express = require("express");
 const fs = require("fs-extra");
+const qrcode = require("qrcode-terminal");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const SESSION_PATH = './session_king_v4';
+const SESSION_PATH = './auth_session';
 
 app.use(express.json());
 
-// UI KUBWA NA RAHISI
+// UI KUBWA KWA AJILI YA SIMU
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html lang="sw">
         <head>
-            <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Venocyber Status King</title>
             <style>
-                body { font-family: sans-serif; background: #075e54; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-                .card { background: white; padding: 40px 20px; border-radius: 20px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-                h1 { color: #075e54; font-size: 30px; margin-bottom: 20px; }
-                input { width: 100%; padding: 15px; margin: 15px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 18px; text-align: center; }
+                body { background: #075e54; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                .box { background: white; padding: 40px 20px; border-radius: 20px; width: 90%; max-width: 450px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+                h1 { color: #075e54; margin-bottom: 20px; font-size: 30px; }
+                input { width: 100%; padding: 15px; margin-bottom: 20px; border: 2px solid #ddd; border-radius: 10px; font-size: 20px; text-align: center; box-sizing: border-box; }
                 button { width: 100%; padding: 15px; background: #25d366; color: white; border: none; border-radius: 10px; font-size: 20px; font-weight: bold; cursor: pointer; }
-                #pairing-code { margin-top: 25px; padding: 20px; background: #e7f3ef; border: 2px dashed #25d366; border-radius: 10px; font-size: 32px; font-weight: bold; color: #075e54; display: none; letter-spacing: 5px; }
-                .loader { color: #d9534f; margin-top: 15px; font-weight: bold; display: none; }
+                #code { margin-top: 25px; padding: 20px; background: #e7f3ef; border: 2px dashed #25d366; border-radius: 10px; font-size: 32px; font-weight: bold; display: none; color: #075e54; letter-spacing: 5px; }
+                .msg { font-size: 14px; color: #666; margin-top: 15px; }
             </style>
         </head>
         <body>
-            <div class="card">
+            <div class="box">
                 <h1>Venocyber 👑</h1>
                 <input type="number" id="num" placeholder="255761070761">
-                <button onclick="getCode()" id="btn">Get Pairing Code</button>
-                <div id="loader" class="loader">Inatengeneza... Subiri sekunde 15...</div>
-                <div id="pairing-code"></div>
+                <button onclick="get()">Pata Pairing Code</button>
+                <div id="code"></div>
+                <p class="msg" id="st">Baada ya kubonyeza, subiri sekunde 15.</p>
             </div>
             <script>
-                async function getCode() {
+                async function get() {
                     const n = document.getElementById('num').value;
-                    const b = document.getElementById('btn');
-                    const r = document.getElementById('pairing-code');
-                    const l = document.getElementById('loader');
+                    const c = document.getElementById('code');
+                    const s = document.getElementById('st');
                     if(!n) return alert("Weka namba!");
-                    b.disabled = true; l.style.display = "block"; r.style.display = "none";
-                    try {
-                        const res = await fetch('/pair?number=' + n);
-                        const data = await res.json();
-                        l.style.display = "none"; b.disabled = false;
-                        if(data.code) { r.innerText = data.code; r.style.display = "block"; }
-                        else { alert("Failed. Try Again."); }
-                    } catch(e) { alert("Error!"); b.disabled = false; l.style.display = "none"; }
+                    s.innerText = "Inatengeneza... tafadhali subiri...";
+                    const r = await fetch('/pair?number=' + n);
+                    const d = await r.json();
+                    if(d.code) { c.innerText = d.code; c.style.display = "block"; s.innerText = "Ingiza kodi hii kwenye WhatsApp sasa!"; }
+                    else { s.innerText = "Imeshindwa. Jaribu tena au angalia Logs."; }
                 }
             </script>
         </body>
@@ -66,23 +61,29 @@ app.get('/', (req, res) => {
 });
 
 let sock;
-async function startBot(num = null, res = null) {
-    if (num && fs.existsSync(SESSION_PATH)) { fs.removeSync(SESSION_PATH); }
+async function start() {
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
-
     sock = makeWASocket({
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, P({ level: "silent" })),
-        },
-        logger: P({ level: 'silent' }),
-        browser: Browsers.macOS("Safari"), // Hii identity ni imara kuliko zote sasa hivi
-        syncFullHistory: false
+        auth: state,
+        logger: P({ level: "silent" }),
+        browser: Browsers.macOS("Chrome"),
+        printQRInTerminal: true // Hii itatoa QR Code kwenye Render Logs
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // KAZI: AUTO STATUS VIEW & LIKE
+    sock.ev.on('connection.update', (u) => {
+        const { connection, lastDisconnect } = u;
+        if (connection === 'open') {
+            console.log("BOT IS ONLINE!");
+            sock.sendMessage(sock.user.id.split(':')[0] + "@s.whatsapp.net", { text: "Dear " + (sock.user.name || "User") + " Venocyber status View king 👑 connected successful Enjoy" });
+        }
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) start();
+        }
+    });
+
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
         if (msg?.key.remoteJid === 'status@broadcast') {
@@ -91,34 +92,20 @@ async function startBot(num = null, res = null) {
         }
     });
 
-    sock.ev.on('connection.update', async (u) => {
-        const { connection, lastDisconnect } = u;
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) startBot();
-        } else if (connection === 'open') {
-            const myJid = sock.user.id.split(':')[0] + "@s.whatsapp.net";
-            await sock.sendMessage(myJid, { text: `Dear ${sock.user.name || 'User'} Venocyber status View king 👑 connected successful Enjoy` });
+    app.get('/pair', async (req, res) => {
+        const number = req.query.number;
+        if (!sock.authState.creds.registered) {
+            setTimeout(async () => {
+                try {
+                    const code = await sock.requestPairingCode(number);
+                    if (!res.headersSent) res.json({ code });
+                } catch { if (!res.headersSent) res.json({ error: true }); }
+            }, 15000);
         }
     });
-
-    if (num && !sock.authState.creds.registered) {
-        setTimeout(async () => {
-            try {
-                const code = await sock.requestPairingCode(num);
-                if (res && !res.headersSent) res.json({ code });
-            } catch (e) { if (res && !res.headersSent) res.json({ error: true }); }
-        }, 15000);
-    }
 }
 
-app.get('/pair', (req, res) => {
-    const number = req.query.number;
-    if (!number) return res.json({ error: "No number" });
-    startBot(number, res);
-});
-
 app.listen(PORT, () => {
-    console.log(`Port ${PORT}`);
-    startBot();
+    console.log("Live on " + PORT);
+    start();
 });
