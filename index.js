@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3000;
 let sock;
 
 async function startVenocyber() {
-    // Hakikisha folder la session lipo kwa ajili ya kuhifadhi login
+    // 1. Kuhifadhi session kwa usalama
     if (!fs.existsSync('./session')) {
         fs.mkdirSync('./session');
     }
@@ -31,8 +31,12 @@ async function startVenocyber() {
         },
         printQRInTerminal: false,
         logger: pino({ level: "fatal" }),
-        browser: Browsers.macOS("Safari"), // Inasaidia kuifanya bot ionekane kama browser ya kawaida
-        version
+        browser: Browsers.macOS("Safari"),
+        version,
+        // Maboresho ya kuvuta contacts zote
+        syncFullHistory: true,
+        shouldSyncHistoryMessage: () => true,
+        markOnlineOnConnect: true
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -41,15 +45,15 @@ async function startVenocyber() {
         const { connection, lastDisconnect } = update;
         
         if (connection === 'open') {
-            console.log('✅ Venocyber King Connected!');
+            console.log('✅ VENOCYBER KING IS LIVE!');
             
-            // Subiri sekunde kidogo ili kupata data za mtumiaji
-            await delay(3000);
+            // Subiri kidogo ili data zipakiwe
+            await delay(5000);
             
             const pushName = sock.user.name || "Mtumiaji";
             const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
 
-            // Feedback Message
+            // Ujumbe wa Feedback kama ulivyoagiza
             await sock.sendMessage(myJid, { 
                 text: `Dear ${pushName} Venocyber status view king 👑 is connected successful Congratulations` 
             });
@@ -61,23 +65,26 @@ async function startVenocyber() {
         }
     });
 
-    // --- AUTO STATUS VIEW LOGIC ---
+    // --- LOGIC YA AUTO STATUS VIEW ---
     sock.ev.on('messages.upsert', async (chatUpdate) => {
-        const msg = chatUpdate.messages[0];
-        if (!msg.message) return;
-        
-        // Kama ujumbe unatoka kwenye status broadcast
-        if (msg.key.remoteJid === 'status@broadcast') {
-            await sock.readMessages([msg.key]);
-            console.log(`✅ Viewed Status from: ${msg.pushName || 'Contact'}`);
+        try {
+            const msg = chatUpdate.messages[0];
+            if (!msg.message) return;
+
+            if (msg.key.remoteJid === 'status@broadcast') {
+                // Inasoma status papo hapo
+                await sock.readMessages([msg.key]);
+                console.log(`✅ Imesoma Status ya: ${msg.pushName || 'Siri'}`);
+            }
+        } catch (e) {
+            // Unasubiri error bila kuzima bot
         }
     });
 }
 
-// Anzisha Bot
 startVenocyber();
 
-// --- GOLD INTERFACE (UI) ---
+// --- PREMIUM GOLD WEB INTERFACE ---
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -87,99 +94,105 @@ app.get('/', (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Venocyber Status King</title>
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-                background: linear-gradient(135deg, #000000 0%, #332b00 100%);
+            body {
+                background: radial-gradient(circle, #2c2c2c 0%, #000000 100%);
                 color: #FFD700;
-                font-family: 'Arial', sans-serif;
+                font-family: 'Trebuchet MS', sans-serif;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 height: 100vh;
+                margin: 0;
             }
-            .container {
-                width: 90%;
-                max-width: 450px;
-                background: rgba(0, 0, 0, 0.8);
-                border: 3px solid #FFD700;
-                border-radius: 20px;
-                padding: 40px 20px;
+            .main-card {
+                background: rgba(0, 0, 0, 0.9);
+                border: 4px solid #FFD700;
+                border-radius: 40px;
+                padding: 60px 30px;
+                width: 95%;
+                max-width: 480px;
                 text-align: center;
-                box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+                box-shadow: 0 0 40px rgba(255, 215, 0, 0.6);
             }
-            h1 { font-size: 2rem; margin-bottom: 10px; text-shadow: 0 0 10px #FFD700; }
-            p { color: #fff; margin-bottom: 30px; font-size: 0.9rem; }
+            h1 { font-size: 2.8rem; margin-bottom: 5px; letter-spacing: -1px; }
+            .subtitle { color: #fff; font-size: 1.1rem; margin-bottom: 40px; opacity: 0.8; }
             input {
                 width: 100%;
-                padding: 15px;
-                border-radius: 10px;
-                border: 1px solid #FFD700;
+                padding: 20px;
+                font-size: 1.4rem;
+                border-radius: 20px;
+                border: 2px solid #FFD700;
                 background: #111;
                 color: #fff;
-                font-size: 1.1rem;
-                margin-bottom: 20px;
+                margin-bottom: 25px;
                 text-align: center;
             }
             button {
                 width: 100%;
-                padding: 15px;
-                background: #FFD700;
+                padding: 20px;
+                font-size: 1.4rem;
+                background: linear-gradient(45deg, #FFD700, #DAA520);
                 color: #000;
                 border: none;
-                border-radius: 10px;
-                font-size: 1.2rem;
+                border-radius: 20px;
                 font-weight: bold;
                 cursor: pointer;
+                box-shadow: 0 10px 20px rgba(0,0,0,0.5);
                 transition: 0.3s;
             }
-            button:hover { background: #fff; transform: translateY(-2px); }
-            #pairingCode {
-                margin-top: 25px;
-                padding: 15px;
-                border: 2px dashed #FFD700;
-                font-size: 1.8rem;
-                font-weight: bold;
-                color: #00FF00;
+            button:hover {
+                transform: scale(1.03);
+                background: #fff;
+            }
+            #code-box {
+                margin-top: 35px;
+                padding: 25px;
+                border: 3px dashed #FFD700;
+                border-radius: 15px;
+                font-size: 2.5rem;
+                font-weight: 900;
+                color: #fff;
                 display: none;
                 background: #222;
+                letter-spacing: 8px;
             }
-            .loader { color: #fff; font-style: italic; display: none; margin-top: 10px; }
+            .loading { font-size: 1rem; color: #fff; display: none; margin-top: 15px; }
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="main-card">
             <h1>👑 VENOCYBER</h1>
-            <p>STATUS VIEW KING 👑</p>
-            <input type="number" id="phone" placeholder="255761070761">
-            <button onclick="generateCode()">PATA PAIRING CODE</button>
-            <div id="loader" class="loader">Tafadhali subiri, inatengeneza...</div>
-            <div id="pairingCode"></div>
+            <div class="subtitle">STATUS VIEW KING 👑</div>
+            <input type="number" id="phoneNum" placeholder="255761070761">
+            <button onclick="requestPairing()">GET PAIRING CODE</button>
+            <div id="loading-txt" class="loading">Inatafuta code kutoka WhatsApp...</div>
+            <div id="code-box"></div>
         </div>
 
         <script>
-            async function generateCode() {
-                const num = document.getElementById('phone').value;
-                const codeDiv = document.getElementById('pairingCode');
-                const loader = document.getElementById('loader');
+            async function requestPairing() {
+                const num = document.getElementById('phoneNum').value;
+                const box = document.getElementById('code-box');
+                const load = document.getElementById('loading-txt');
                 
-                if(!num) return alert("Ingiza namba ya simu!");
+                if(!num) return alert("Tafadhali ingiza namba ya simu!");
                 
-                loader.style.display = "block";
-                codeDiv.style.display = "none";
+                load.style.display = "block";
+                box.style.display = "none";
 
                 try {
-                    const response = await fetch('/get-code?number=' + num);
+                    const response = await fetch('/pair?number=' + num);
                     const data = await response.json();
-                    loader.style.display = "none";
+                    load.style.display = "none";
                     if(data.code) {
-                        codeDiv.innerText = data.code;
-                        codeDiv.style.display = "block";
+                        box.innerText = data.code;
+                        box.style.display = "block";
                     } else {
-                        alert("Imeshindikana. Jaribu tena!");
+                        alert("Imeshindikana! Hakikisha namba haina '+'");
                     }
                 } catch (e) {
-                    loader.style.display = "none";
-                    alert("Server error. Hakikisha Render ipo Online.");
+                    load.style.display = "none";
+                    alert("Server imeshindwa kuunganisha.");
                 }
             }
         </script>
@@ -188,16 +201,14 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Endpoint ya kutengeneza code
-app.get('/get-code', async (req, res) => {
+app.get('/pair', async (req, res) => {
     let num = req.query.number;
-    if (!num) return res.json({ error: "No number" });
     try {
         let code = await sock.requestPairingCode(num);
         res.json({ code: code });
     } catch (e) {
-        res.json({ error: "Goma" });
+        res.json({ error: "Failed" });
     }
 });
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(PORT, () => console.log(`Bot Running on Port ${PORT}`));
