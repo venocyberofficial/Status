@@ -1,7 +1,7 @@
 {
   "name": "venocyber-status-view-king",
-  "version": "1.1.0",
-  "description": "WhatsApp Auto Status View Bot with Gold UI",
+  "version": "1.2.0",
+  "description": "WhatsApp Auto Status View Bot - Ultimate Gold Edition",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
