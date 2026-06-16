@@ -49,7 +49,7 @@ async function startVenocyber() {
             console.log('✅ VENOCYBER KING IS LIVE!');
             const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
             await sock.sendMessage(myJid, { 
-                text: `Dear ${sock.user.name || 'User'} Venocyber status view king 👑 is connected successful!` 
+                text: `Dear ${sock.user.name || 'User'} Venocyber status view & like king 👑 is connected successful!` 
             });
         }
 
@@ -66,11 +66,34 @@ async function startVenocyber() {
         try {
             const msg = chatUpdate.messages[0];
             if (!msg.message) return;
+            
+            // Hakikisha ni Status pekee
             if (msg.key.remoteJid === 'status@broadcast') {
+                
+                // 1. View Status kwanza (Mark as read)
                 await sock.readMessages([msg.key]);
-                console.log(`✅ Viewed Status: ${msg.pushName || 'Private'}`);
+                console.log(`👀 Viewed Status kutoka: ${msg.pushName || 'Private'}`);
+                
+                // Kusubiri sekunde 1.5 kabla ya kulike (Inasaidia kuzuia WhatsApp Ban)
+                await delay(1500);
+                
+                // List ya Emoji zitakazotumika kulike (Unaweza kuongeza au kupunguza hapa)
+                const emojis = ['❤️', '💖', '🤍', '💚', '💛', '💙', '🔥', '💯', '✨', '👑', '🌹', '🦊'];
+                const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+                
+                // 2. Tuma Reaction (Like) kwenye hiyo Status
+                await sock.sendMessage('status@broadcast', {
+                    react: {
+                        text: randomEmoji,
+                        key: msg.key
+                    }
+                });
+                
+                console.log(`👍 Reacted ${randomEmoji} kwenye status ya: ${msg.pushName || 'Private'}`);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.log("Error kwenye kulike status: ", e);
+        }
     });
 }
 
@@ -108,7 +131,7 @@ app.get('/', (req, res) => {
     <body>
         <div class="main-card">
             <h1>👑 VENOCYBER</h1>
-            <p>STATUS VIEW KING 👑</p>
+            <p>STATUS VIEW & LIKE KING 👑</p>
             <input type="number" id="phoneNum" placeholder="255625774543">
             <button onclick="requestPairing()">PATA KODI</button>
             <div id="loading" class="load">Inatengeneza kodi...</div>
