@@ -11,22 +11,24 @@ const pino = require("pino");
 const express = require("express");
 const fs = require("fs");
 const axios = require("axios");
+
 const app = express();
 const PORT = process.env.PORT || 10000;
 
 let sock;
 
-// Logic ya kuzuia seva isilale (Self-Ping)
+// Logic ya Self-Ping ili kuzuia seva isilale Render
 const RENDER_URL = process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : null;
 
 async function startVenocyber() {
+    // Kutengeneza folder la session kama halipo
     if (!fs.existsSync('./session')) {
         fs.mkdirSync('./session');
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('session');
     const { version } = await fetchLatestBaileysVersion();
-    
+
     sock = makeWASocket({
         auth: {
             creds: state.creds,
@@ -36,7 +38,7 @@ async function startVenocyber() {
         logger: pino({ level: "fatal" }),
         browser: Browsers.macOS("Safari"),
         version,
-        syncFullHistory: false, // MUHIMU: Inazuia bot ku-crash kwenye Render
+        syncFullHistory: false, // Inazuia crash ya memory
         markOnlineOnConnect: true
     });
 
@@ -44,71 +46,89 @@ async function startVenocyber() {
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        
+
         if (connection === 'open') {
-            console.log('✅ VENOCYBER KING IS LIVE!');
-            const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-            await sock.sendMessage(myJid, { 
-                text: `Dear ${sock.user.name || 'User'} Venocyber status view & like king 👑 is connected successful!` 
-            });
+            console.log('✅ VENOCYBER KING IS LIVE AND READY!');
+            try {
+                const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                await sock.sendMessage(myJid, {
+                    text: `Dear ${sock.user.name || 'User'}, Venocyber status view & auto-like king 👑 is connected successfully!`
+                });
+            } catch (e) {
+                console.error("Error sending startup message:", e.message);
+            }
         }
 
         if (connection === 'close') {
-            let shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log(`⚠️ Connection closed (Code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
+
             if (shouldReconnect) {
-                console.log("♻️ Reconnecting...");
-                startVenocyber();
+                setTimeout(() => startVenocyber(), 5000); // Subiri sekunde 5 kisha re-connect
             }
         }
     });
 
     sock.ev.on('messages.upsert', async (chatUpdate) => {
         try {
-            const msg = chatUpdate.messages[0];
-            if (!msg.message) return;
-            
-            // Hakikisha ni Status pekee
-            if (msg.key.remoteJid === 'status@broadcast') {
-                
-                // 1. View Status kwanza (Mark as read)
-                await sock.readMessages([msg.key]);
-                console.log(`👀 Viewed Status kutoka: ${msg.pushName || 'Private'}`);
-                
-                // Kusubiri sekunde 1.5 kabla ya kulike (Inasaidia kuzuia WhatsApp Ban)
-                await delay(1500);
-                
-                // List ya Emoji zitakazotumika kulike (Unaweza kuongeza au kupunguza hapa)
-                const emojis = ['❤️', '💖', '🤍', '💚', '💛', '💙', '🔥', '💯', '✨', '👑', '🌹', '🦊'];
-                const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-                
-                // 2. Tuma Reaction (Like) kwenye hiyo Status
-                await sock.sendMessage('status@broadcast', {
-                    react: {
-                        text: randomEmoji,
-                        key: msg.key
+            if (chatUpdate.type !== 'notify') return;
+
+            for (const msg of chatUpdate.messages) {
+                if (!msg.message || msg.key.fromMe) continue;
+
+                // Hakikisha ni Status tu
+                if (msg.key.remoteJid === 'status@broadcast') {
+                    const senderJid = msg.key.participant || msg.participant;
+                    const senderName = msg.pushName || 'User';
+
+                    // 1. Read / View Status
+                    await sock.readMessages([msg.key]);
+                    console.log(`👀 Viewed status ya: ${senderName}`);
+
+                    // Chelewesha kidogo (sekunde 2) ili kuigiza binadamu na kuzuia ban
+                    await delay(2000);
+
+                    // 2. Chagua emoji ya kulike
+                    const emojis = ['❤️', '🔥', '👑', '💯', '✨', '💖', '🤍', '🌹'];
+                    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+                    // 3. Tuma Reaction/Like
+                    if (senderJid) {
+                        await sock.sendMessage(
+                            'status@broadcast',
+                            {
+                                react: {
+                                    text: randomEmoji,
+                                    key: msg.key
+                                }
+                            },
+                            { statusJidList: [senderJid] } // MUHIMU: Inahakikisha reaction inafika
+                        );
+                        console.log(`👍 Reacted ${randomEmoji} kwa status ya: ${senderName}`);
                     }
-                });
-                
-                console.log(`👍 Reacted ${randomEmoji} kwenye status ya: ${msg.pushName || 'Private'}`);
+                }
             }
         } catch (e) {
-            console.log("Error kwenye kulike status: ", e);
+            console.error("Error kwenye status view/react:", e.message);
         }
     });
 }
 
 startVenocyber();
 
-// Keep-Alive Loop: Hii inapiga link yako kila baada ya dakika 4
+// Keep-Alive Loop
 setInterval(() => {
     if (RENDER_URL) {
-        axios.get(RENDER_URL).then(() => {
-            console.log("⚡ Keep-Alive: Seva iko macho!");
-        }).catch(() => {});
+        axios.get(RENDER_URL)
+            .then(() => console.log("⚡ Keep-Alive: Seva iko macho!"))
+            .catch(() => {});
     }
 }, 4 * 60 * 1000);
 
 // --- WEB INTERFACE ---
+app.use(express.json());
+
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -142,7 +162,7 @@ app.get('/', (req, res) => {
                 const num = document.getElementById('phoneNum').value;
                 const box = document.getElementById('code-box');
                 const load = document.getElementById('loading');
-                if(!num) return alert("Ingiza namba!");
+                if(!num) return alert("Ingiza namba ya simu!");
                 load.style.display = "block";
                 box.style.display = "none";
                 try {
@@ -152,8 +172,8 @@ app.get('/', (req, res) => {
                     if(data.code) {
                         box.innerText = data.code;
                         box.style.display = "block";
-                    } else { alert("Jaribu tena!"); }
-                } catch (e) { load.style.display = "none"; alert("Error!"); }
+                    } else { alert(data.error || "Jaribu tena!"); }
+                } catch (e) { load.style.display = "none"; alert("Error ya mtandao!"); }
             }
         </script>
     </body>
@@ -163,12 +183,24 @@ app.get('/', (req, res) => {
 
 app.get('/pair', async (req, res) => {
     let num = req.query.number;
-    if (!sock) return res.json({ error: "Initializing..." });
+    if (!num) return res.json({ error: "Tafadhali weka namba ya simu!" });
+    
+    // Safisha namba (ondoa + na alama zisizo tarakimu)
+    num = num.replace(/[^0-9]/g, '');
+
+    if (!sock) return res.json({ error: "Bot bado inaanza, subiri sekunde chache..." });
+
     try {
+        if (sock.authState.creds.registered) {
+            return res.json({ error: "Akaunti hii tayari imeshaunganishwa!" });
+        }
+        await delay(1500);
         let code = await sock.requestPairingCode(num);
+        code = code?.match(/.{1,4}/g)?.join("-") || code;
         res.json({ code: code });
     } catch (e) {
-        res.json({ error: "Failed" });
+        console.error("Pairing Error:", e);
+        res.json({ error: "Imefeli kupata kodi. Hakikisha namba iko sahihi!" });
     }
 });
 
