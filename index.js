@@ -5,8 +5,7 @@ const {
     makeCacheableSignalKeyStore,
     fetchLatestBaileysVersion,
     DisconnectReason,
-    Browsers, // Imeongezwa kwa usalama wa Pairing
-    jidNormalizedUser // Imeongezwa kusafisha namba za simu
+    jidNormalizedUser
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require("express");
@@ -29,16 +28,16 @@ async function startVenocyber() {
 
     sock = makeWASocket({
         version,
-        logger: pino({ level: "silent" }), // Imebadilishwa kuwa silent kupunguza maandishi mengi kwenye terminal
+        logger: pino({ level: "silent" }),
         printQRInTerminal: false,
-        // Tumia Browsers default kuepuka WhatsApp kukataa connection ya code
-        browser: Browsers.macOS('Desktop'),
+        // Hapa tumerudisha mipangilio ya mwanzo ili WhatsApp isikatae kodi
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
         },
         generateHighQualityLinkPreview: true,
-        syncFullHistory: false, // Tunakataa history ili isisome status za zamani
+        syncFullHistory: false, // Inazuia bot kusoma status za zamani
         markOnlineOnConnect: true,
         getMessage: async (key) => {
             return { conversation: 'status' };
@@ -53,7 +52,6 @@ async function startVenocyber() {
         if (connection === 'open') {
             console.log('✅ VENOCYBER KING IS LIVE AND READY!');
             try {
-                // Tuma ujumbe kwa mwenye namba bot ikiwaka
                 const myJid = jidNormalizedUser(sock.user.id);
                 await sock.sendMessage(myJid, {
                     text: `👑 *Venocyber Status King Active!*\n\n✅ Bot ipo hewani sasa, inasoma (view) na kulike statuses automatically.`
@@ -78,18 +76,17 @@ async function startVenocyber() {
 
     // MFUMO WA KUDAKA NA KULIKE STATUS
     sock.ev.on('messages.upsert', async (chatUpdate) => {
-        // MUHIMU SANA 1: Ruhusu tu meseji mpya zinazoingia, zuia history
+        // Inaruhusu tu meseji mpya zinazoingia kuepuka bot kukwama (rate-limit)
         if (chatUpdate.type !== 'notify') return;
 
         const messages = chatUpdate.messages;
         if (!messages || messages.length === 0) return;
 
         for (const msg of messages) {
-            // MUHIMU SANA 2: Weka Try-Catch ndani ya loop ili error moja isivunje mfumo
             try {
                 if (!msg.message) continue;
                 
-                // MUHIMU SANA 3: Zuia bot kujisomea / kureact kwenye status zako mwenyewe (Inaleta error)
+                // Inazuia bot kujisomea / kureact kwenye status zako mwenyewe
                 if (msg.key.fromMe) continue;
 
                 // Angalia kama ni Status
@@ -100,12 +97,12 @@ async function startVenocyber() {
                     const senderName = msg.pushName || 'WhatsApp User';
                     console.log(`📩 Status mpya imedakwa kutoka kwa: ${senderName}`);
 
-                    // 1. READ / VIEW STATUS (Pitisha msg.key moja kwa moja)
+                    // 1. READ / VIEW STATUS (Njia mpya na salama)
                     await sock.readMessages([msg.key]);
                     console.log(`👀 Imemark STATUS kuwa VIEWED: ${senderName}`);
 
-                    // Subiri sekunde 2 ili ionekane kama binadamu
-                    await delay(2000);
+                    // Subiri sekunde 2.5
+                    await delay(2500);
 
                     // 2. LIKE STATUS (REACTION)
                     const emojis = ['❤️', '🔥', '👑', '💯', '✨', '💖', '🤍', '🌹'];
