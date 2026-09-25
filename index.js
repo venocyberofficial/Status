@@ -4,8 +4,7 @@ const {
     delay,
     makeCacheableSignalKeyStore,
     fetchLatestBaileysVersion,
-    DisconnectReason,
-    Browsers
+    DisconnectReason
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require("express");
@@ -16,12 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 let sock;
-
-// Logic ya Self-Ping ili kuzuia seva isilale Render
 const RENDER_URL = process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : null;
 
 async function startVenocyber() {
-    // Kutengeneza folder la session kama halipo
     if (!fs.existsSync('./session')) {
         fs.mkdirSync('./session');
     }
@@ -30,16 +26,22 @@ async function startVenocyber() {
     const { version } = await fetchLatestBaileysVersion();
 
     sock = makeWASocket({
+        version,
+        logger: pino({ level: "fatal" }),
+        printQRInTerminal: false,
+        // 1. Mabadiliko ya Browser ili WhatsApp itume Status Broadcast kwa haraka
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
         },
-        printQRInTerminal: false,
-        logger: pino({ level: "fatal" }),
-        browser: Browsers.macOS("Safari"),
-        version,
-        syncFullHistory: false, // Inazuia crash ya memory
-        markOnlineOnConnect: true
+        generateHighQualityLinkPreview: true,
+        syncFullHistory: false,
+        markOnlineOnConnect: true,
+        // 2. MUHIMU SANA: Inazuia Baileys kudrop status encrypted messages
+        getMessage: async (key) => {
+            return { conversation: 'status' };
+        }
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -52,48 +54,52 @@ async function startVenocyber() {
             try {
                 const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                 await sock.sendMessage(myJid, {
-                    text: `Dear ${sock.user.name || 'User'}, Venocyber status view & auto-like king 👑 is connected successfully!`
+                    text: `Dear ${sock.user.name || 'User'}, Status View & Auto-Like King 👑 is active now!`
                 });
-            } catch (e) {
-                console.error("Error sending startup message:", e.message);
-            }
+            } catch (e) {}
         }
 
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(`⚠️ Connection closed (Code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
+            console.log(`⚠️ Connection closed. Reconnecting in 5 seconds...`);
 
             if (shouldReconnect) {
-                setTimeout(() => startVenocyber(), 5000); // Subiri sekunde 5 kisha re-connect
+                setTimeout(() => startVenocyber(), 5000);
             }
         }
     });
 
+    // MFUMO WA KUDAKA NA KULIKE STATUS
     sock.ev.on('messages.upsert', async (chatUpdate) => {
         try {
-            if (chatUpdate.type !== 'notify') return;
+            const messages = chatUpdate.messages;
+            if (!messages || messages.length === 0) return;
 
-            for (const msg of chatUpdate.messages) {
-                if (!msg.message || msg.key.fromMe) continue;
+            for (const msg of messages) {
+                if (!msg.message) continue;
 
-                // Hakikisha ni Status tu
+                // Angalia kama ni Status
                 if (msg.key.remoteJid === 'status@broadcast') {
                     const senderJid = msg.key.participant || msg.participant;
-                    const senderName = msg.pushName || 'User';
+                    const senderName = msg.pushName || 'WhatsApp User';
 
-                    // 1. Read / View Status
-                    await sock.readMessages([msg.key]);
-                    console.log(`👀 Viewed status ya: ${senderName}`);
+                    console.log(`📩 Status mpya imedakwa kutoka kwa: ${senderName}`);
 
-                    // Chelewesha kidogo (sekunde 2) ili kuigiza binadamu na kuzuia ban
-                    await delay(2000);
+                    // 1. READ / VIEW STATUS
+                    await sock.readMessages([{
+                        remoteJid: 'status@broadcast',
+                        id: msg.key.id,
+                        participant: senderJid
+                    }]);
+                    console.log(`👀 Imemark STATUS kuwa VIEWED: ${senderName}`);
 
-                    // 2. Chagua emoji ya kulike
+                    await delay(2500);
+
+                    // 2. LIKE STATUS (REACTION)
                     const emojis = ['❤️', '🔥', '👑', '💯', '✨', '💖', '🤍', '🌹'];
                     const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
 
-                    // 3. Tuma Reaction/Like
                     if (senderJid) {
                         await sock.sendMessage(
                             'status@broadcast',
@@ -103,14 +109,14 @@ async function startVenocyber() {
                                     key: msg.key
                                 }
                             },
-                            { statusJidList: [senderJid] } // MUHIMU: Inahakikisha reaction inafika
+                            { statusJidList: [senderJid] }
                         );
-                        console.log(`👍 Reacted ${randomEmoji} kwa status ya: ${senderName}`);
+                        console.log(`👍 Imereact ${randomEmoji} kwa status ya: ${senderName}`);
                     }
                 }
             }
         } catch (e) {
-            console.error("Error kwenye status view/react:", e.message);
+            console.error("Error kwenye processing status:", e);
         }
     });
 }
@@ -120,9 +126,7 @@ startVenocyber();
 // Keep-Alive Loop
 setInterval(() => {
     if (RENDER_URL) {
-        axios.get(RENDER_URL)
-            .then(() => console.log("⚡ Keep-Alive: Seva iko macho!"))
-            .catch(() => {});
+        axios.get(RENDER_URL).catch(() => {});
     }
 }, 4 * 60 * 1000);
 
@@ -183,25 +187,20 @@ app.get('/', (req, res) => {
 
 app.get('/pair', async (req, res) => {
     let num = req.query.number;
-    if (!num) return res.json({ error: "Tafadhali weka namba ya simu!" });
-    
-    // Safisha namba (ondoa + na alama zisizo tarakimu)
+    if (!num) return res.json({ error: "Tafadhali weka namba!" });
     num = num.replace(/[^0-9]/g, '');
-
-    if (!sock) return res.json({ error: "Bot bado inaanza, subiri sekunde chache..." });
-
+    if (!sock) return res.json({ error: "Bot bado inaanza..." });
     try {
         if (sock.authState.creds.registered) {
-            return res.json({ error: "Akaunti hii tayari imeshaunganishwa!" });
+            return res.json({ error: "Tayari imounganishwa!" });
         }
         await delay(1500);
         let code = await sock.requestPairingCode(num);
         code = code?.match(/.{1,4}/g)?.join("-") || code;
         res.json({ code: code });
     } catch (e) {
-        console.error("Pairing Error:", e);
-        res.json({ error: "Imefeli kupata kodi. Hakikisha namba iko sahihi!" });
+        res.json({ error: "Failed code generation" });
     }
 });
 
-app.listen(PORT, () => console.log(`🚀 Seva imewaka kwenye Port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server listening on Port ${PORT}`));
