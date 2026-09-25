@@ -4,7 +4,9 @@ const {
     delay,
     makeCacheableSignalKeyStore,
     fetchLatestBaileysVersion,
-    DisconnectReason
+    DisconnectReason,
+    Browsers, // Imeongezwa kwa usalama wa Pairing
+    jidNormalizedUser // Imeongezwa kusafisha namba za simu
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const express = require("express");
@@ -27,18 +29,17 @@ async function startVenocyber() {
 
     sock = makeWASocket({
         version,
-        logger: pino({ level: "fatal" }),
+        logger: pino({ level: "silent" }), // Imebadilishwa kuwa silent kupunguza maandishi mengi kwenye terminal
         printQRInTerminal: false,
-        // 1. Mabadiliko ya Browser ili WhatsApp itume Status Broadcast kwa haraka
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
+        // Tumia Browsers default kuepuka WhatsApp kukataa connection ya code
+        browser: Browsers.macOS('Desktop'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
         },
         generateHighQualityLinkPreview: true,
-        syncFullHistory: false,
+        syncFullHistory: false, // Tunakataa history ili isisome status za zamani
         markOnlineOnConnect: true,
-        // 2. MUHIMU SANA: Inazuia Baileys kudrop status encrypted messages
         getMessage: async (key) => {
             return { conversation: 'status' };
         }
@@ -52,71 +53,79 @@ async function startVenocyber() {
         if (connection === 'open') {
             console.log('✅ VENOCYBER KING IS LIVE AND READY!');
             try {
-                const myJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                // Tuma ujumbe kwa mwenye namba bot ikiwaka
+                const myJid = jidNormalizedUser(sock.user.id);
                 await sock.sendMessage(myJid, {
-                    text: `Dear ${sock.user.name || 'User'}, Status View & Auto-Like King 👑 is active now!`
+                    text: `👑 *Venocyber Status King Active!*\n\n✅ Bot ipo hewani sasa, inasoma (view) na kulike statuses automatically.`
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.log("Haikuweza kutuma ujumbe wa utambulisho.");
+            }
         }
 
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(`⚠️ Connection closed. Reconnecting in 5 seconds...`);
+            console.log(`⚠️ Connection closed. Reconnecting... (Code: ${statusCode})`);
 
             if (shouldReconnect) {
                 setTimeout(() => startVenocyber(), 5000);
+            } else {
+                console.log('❌ Bot imetolewa (Logged Out). Futa folder la session na uunganishe upya.');
             }
         }
     });
 
     // MFUMO WA KUDAKA NA KULIKE STATUS
     sock.ev.on('messages.upsert', async (chatUpdate) => {
-        try {
-            const messages = chatUpdate.messages;
-            if (!messages || messages.length === 0) return;
+        // MUHIMU SANA 1: Ruhusu tu meseji mpya zinazoingia, zuia history
+        if (chatUpdate.type !== 'notify') return;
 
-            for (const msg of messages) {
+        const messages = chatUpdate.messages;
+        if (!messages || messages.length === 0) return;
+
+        for (const msg of messages) {
+            // MUHIMU SANA 2: Weka Try-Catch ndani ya loop ili error moja isivunje mfumo
+            try {
                 if (!msg.message) continue;
+                
+                // MUHIMU SANA 3: Zuia bot kujisomea / kureact kwenye status zako mwenyewe (Inaleta error)
+                if (msg.key.fromMe) continue;
 
                 // Angalia kama ni Status
                 if (msg.key.remoteJid === 'status@broadcast') {
-                    const senderJid = msg.key.participant || msg.participant;
-                    const senderName = msg.pushName || 'WhatsApp User';
+                    const senderJid = msg.key.participant;
+                    if (!senderJid) continue;
 
+                    const senderName = msg.pushName || 'WhatsApp User';
                     console.log(`📩 Status mpya imedakwa kutoka kwa: ${senderName}`);
 
-                    // 1. READ / VIEW STATUS
-                    await sock.readMessages([{
-                        remoteJid: 'status@broadcast',
-                        id: msg.key.id,
-                        participant: senderJid
-                    }]);
+                    // 1. READ / VIEW STATUS (Pitisha msg.key moja kwa moja)
+                    await sock.readMessages([msg.key]);
                     console.log(`👀 Imemark STATUS kuwa VIEWED: ${senderName}`);
 
-                    await delay(2500);
+                    // Subiri sekunde 2 ili ionekane kama binadamu
+                    await delay(2000);
 
                     // 2. LIKE STATUS (REACTION)
                     const emojis = ['❤️', '🔥', '👑', '💯', '✨', '💖', '🤍', '🌹'];
                     const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
 
-                    if (senderJid) {
-                        await sock.sendMessage(
-                            'status@broadcast',
-                            {
-                                react: {
-                                    text: randomEmoji,
-                                    key: msg.key
-                                }
-                            },
-                            { statusJidList: [senderJid] }
-                        );
-                        console.log(`👍 Imereact ${randomEmoji} kwa status ya: ${senderName}`);
-                    }
+                    await sock.sendMessage(
+                        'status@broadcast',
+                        {
+                            react: {
+                                text: randomEmoji,
+                                key: msg.key
+                            }
+                        },
+                        { statusJidList: [senderJid] }
+                    );
+                    console.log(`👍 Imereact ${randomEmoji} kwa status ya: ${senderName}`);
                 }
+            } catch (error) {
+                console.error("❌ Error kwenye kusoma status:", error.message);
             }
-        } catch (e) {
-            console.error("Error kwenye processing status:", e);
         }
     });
 }
@@ -192,14 +201,14 @@ app.get('/pair', async (req, res) => {
     if (!sock) return res.json({ error: "Bot bado inaanza..." });
     try {
         if (sock.authState.creds.registered) {
-            return res.json({ error: "Tayari imounganishwa!" });
+            return res.json({ error: "Tayari imeunganishwa na WhatsApp!" });
         }
         await delay(1500);
         let code = await sock.requestPairingCode(num);
         code = code?.match(/.{1,4}/g)?.join("-") || code;
         res.json({ code: code });
     } catch (e) {
-        res.json({ error: "Failed code generation" });
+        res.json({ error: "Haikuweza kutengeneza kodi" });
     }
 });
 
