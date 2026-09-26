@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 10000;
 // 🛠️ SEHEMU YA MA-KEY YAKO YOTE (WEKA HAPA MOJA KWA MOJA)
 // =========================================================================
 const RAPIDAPI_KEY = ""; 
-const MONGO_URL = ""; 
+const MONGO_URL = "mongodb+srv://venocyber:Njombe%402022@cluster0.boub2ld.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"; 
 const OWNER_NUMBER = "255761070761";
 const OWNER_JID = `${OWNER_NUMBER}@s.whatsapp.net`;
 // =========================================================================
